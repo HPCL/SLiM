@@ -4653,6 +4653,9 @@ void SLiMSim::ReorderIndividualTable(tsk_table_collection_t *p_tables, std::vect
 	
 	assert(p_tables->individuals.num_rows == p_individual_map.size());
 	
+	// Free the contents of the individual table copy we made (but not the table itself, which is stack-allocated)
+	tsk_individual_table_free(&individuals_copy);
+	
 	// Fix the individual indices in the nodes table to point to the new rows
 	for (size_t j = 0; j < p_tables->nodes.num_rows; j++)
 	{
