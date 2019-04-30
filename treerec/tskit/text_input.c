@@ -154,7 +154,7 @@ node_table_load_text(tsk_node_table_t *node_table, FILE *file)
             goto out;
         }
         ret = tsk_node_table_add_row(node_table, flags, time, population, individual,
-                name, strlen(name));
+                name, (tsk_size_t)strlen(name));
         if (ret < 0) {
             goto out;
         }
@@ -522,8 +522,8 @@ individual_table_load_text(tsk_individual_table_t *individual_table, FILE *file)
         if (err < 0 || *start != '\0') {
             goto out;
         }
-        ret = tsk_individual_table_add_row(individual_table, flags, location, j,
-                metadata, strlen(metadata));
+        ret = tsk_individual_table_add_row(individual_table, flags, location, (tsk_size_t)j,
+                metadata, (tsk_size_t)strlen(metadata));
         if (ret < 0) {
             goto out;
         }
@@ -634,8 +634,8 @@ provenance_table_load_text(tsk_provenance_table_t *provenance_table, FILE *file)
         if (err < 0 || *start != '\0') {
             goto out;
         }
-        ret = tsk_provenance_table_add_row(provenance_table, timestamp, strlen(timestamp), 
-                record, strlen(record));
+        ret = tsk_provenance_table_add_row(provenance_table, timestamp, (tsk_size_t)strlen(timestamp), 
+                record, (tsk_size_t)strlen(record));
         if (ret < 0) {
             goto out;
         }

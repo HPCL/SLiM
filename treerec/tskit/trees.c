@@ -635,6 +635,14 @@ tsk_treeseq_genealogical_nearest_neighbours(tsk_treeseq_t *self,
     uint32_t *restrict ref_count = calloc(((size_t) K) * num_nodes, sizeof(*ref_count));
     int16_t *restrict reference_set_map = malloc(num_nodes * sizeof(*reference_set_map));
     uint32_t *restrict row, *restrict child_row, total;
+	
+	/*	BCH 30 April 2019: the following two lines get rid of "uninitialized when used" warnings below.
+		I think the correct fix might be to move the whole block that's inside "if (p != TSK_NULL)"
+		(lines 748:761) to just before the "break" statement (line 743); if I understand the control
+		flow correctly, that would be equivalent while also allowing the compiler to understand that
+		the variables are initialized.  But I have refrained from making that change myself. */
+	row = NULL;
+	total = 0;
 
     /* We support a max of 8K focal sets */
     if (num_reference_sets == 0 || num_reference_sets > (INT16_MAX - 1)) {

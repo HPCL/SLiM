@@ -4648,7 +4648,7 @@ void SLiMSim::ReorderIndividualTable(tsk_table_collection_t *p_tables, std::vect
 		const char *metadata = individuals_copy.metadata + individuals_copy.metadata_offset[k];
 		size_t metadata_length = individuals_copy.metadata_offset[k+1] - individuals_copy.metadata_offset[k];
 		
-		tsk_individual_table_add_row(&p_tables->individuals, flags, location, location_length, metadata, metadata_length);
+		tsk_individual_table_add_row(&p_tables->individuals, flags, location, (tsk_size_t)location_length, metadata, (tsk_size_t)metadata_length);
 	}
 	
 	assert(p_tables->individuals.num_rows == p_individual_map.size());
@@ -4718,7 +4718,7 @@ void SLiMSim::SimplifyTreeSequence(void)
     if (ret < 0) handle_error("tsk_table_collection_deduplicate_sites", ret);
 	
 	// simplify
-	ret = tsk_table_collection_simplify(&tables_, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
+	ret = tsk_table_collection_simplify(&tables_, samples.data(), (tsk_size_t)samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
     if (ret != 0) handle_error("tsk_table_collection_simplify", ret);
 	
     // update map of remembered_genomes_, which are now the first n entries in the node table
@@ -4926,7 +4926,7 @@ void SLiMSim::RecordNewGenome(std::vector<slim_position_t> *p_breakpoints, Genom
 	const char *metadata = (char *)&metadata_rec;
 	size_t metadata_length = sizeof(GenomeMetadataRec)/sizeof(char);
 	tsk_id_t offspringTSKID = tsk_node_table_add_row(&tables_.nodes, flags, time, (tsk_id_t)p_new_genome->subpop_->subpopulation_id_,
-                                        TSK_NULL, metadata, metadata_length);
+                                        TSK_NULL, metadata, (tsk_size_t)metadata_length);
 	
 	p_new_genome->tsk_node_id_ = offspringTSKID;
 	
@@ -6088,7 +6088,7 @@ void SLiMSim::WriteProvenanceTable(tsk_table_collection_t *p_tables, bool p_use_
 	tm_info = localtime(&timer);
 	strftime(buffer, timestamp_size, "%Y-%m-%dT%H:%M:%S", tm_info);
 	
-	ret = tsk_provenance_table_add_row(&p_tables->provenances, buffer, strlen(buffer), provenance_str.c_str(), provenance_str.length());
+	ret = tsk_provenance_table_add_row(&p_tables->provenances, buffer, (tsk_size_t)strlen(buffer), provenance_str.c_str(), (tsk_size_t)provenance_str.length());
 	if (ret < 0) handle_error("tsk_provenance_table_add_row", ret);
 #endif
 }
@@ -6747,7 +6747,7 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 			ret = tsk_table_collection_deduplicate_sites(tables_copy, 0);
 			if (ret < 0) handle_error("tsk_table_collection_deduplicate_sites", ret);
 			
-			ret = tsk_table_collection_simplify(tables_copy, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
+			ret = tsk_table_collection_simplify(tables_copy, samples.data(), (tsk_size_t)samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
 			if (ret != 0) handle_error("tsk_table_collection_simplify", ret);
             
 		// must build indexes before compute mutation parents
@@ -7001,7 +7001,7 @@ void SLiMSim::__TabulateSubpopulationsFromTreeSequence(std::unordered_map<slim_o
 	
 	for (size_t individual_index = 0; individual_index < individual_count; individual_index++)
 	{
-		ret = tsk_treeseq_get_individual(p_ts, individual_index, &individual);
+		ret = tsk_treeseq_get_individual(p_ts, (tsk_id_t)individual_index, &individual);
 		if (ret != 0) handle_error("__TabulateSubpopulationsFromTreeSequence tsk_treeseq_get_individual", ret);
 		
 		// tabulate only individuals marked as being alive; everybody else in the table is irrelevant to us during load
