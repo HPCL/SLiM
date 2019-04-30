@@ -59,8 +59,9 @@ extern "C" {
 #endif
 #include "kastore.h"
 #include "../treerec/tskit/trees.h"
-#include "../treerec/tskit/text_input.h"
 #include "../treerec/tskit/tables.h"
+#include "../treerec/tskit/genotypes.h"
+#include "../treerec/tskit/text_input.h"
 #ifdef __cplusplus
 }
 #endif
@@ -4635,7 +4636,7 @@ void SLiMSim::ReorderIndividualTable(tsk_table_collection_t *p_tables, std::vect
 	if (ret < 0) handle_error("reorder_individuals", ret);
 	
 	// Clear p_tables->individuals and copy rows into it in the requested order
-	individual_table_clear(p_tables->individuals);
+	tsk_individual_table_clear(&p_tables->individuals);
 	
 	for (tsk_id_t k : p_individual_map)
 	{
@@ -4669,7 +4670,7 @@ void SLiMSim::SimplifyTreeSequence(void)
 		EIDOS_TERMINATION << "ERROR (SLiMSim::SimplifyTreeSequence): (internal error) tree sequence recording method called with recording off." << EidosTerminate();
 #endif
 	
-	if (tables_.nodes->num_rows == 0)
+	if (tables_.nodes.num_rows == 0)
 		return;
 	
 	std::vector<tsk_id_t> samples;
@@ -4709,16 +4710,16 @@ void SLiMSim::SimplifyTreeSequence(void)
 	WritePopulationTable(&tables_);
 	
 	// sort the table collection
-	int ret = table_collection_sort(&tables_, /* edge_start */ 0, /* flags */ 0);
-	if (ret < 0) handle_error("table_collection_sort", ret);
+	int ret = tsk_table_collection_sort(&tables_, /* edge_start */ 0, /* flags */ 0);
+	if (ret < 0) handle_error("tsk_table_collection_sort", ret);
 
     // remove redundant sites we added
-    ret = table_collection_deduplicate_sites(&tables_, 0);
-    if (ret < 0) handle_error("deduplicate_sites", ret);
+    ret = tsk_table_collection_deduplicate_sites(&tables_, 0);
+    if (ret < 0) handle_error("tsk_table_collection_deduplicate_sites", ret);
 	
 	// simplify
-	ret = table_collection_simplify(&tables_, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
-    if (ret != 0) handle_error("simplifier_run", ret);
+	ret = tsk_table_collection_simplify(&tables_, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
+    if (ret != 0) handle_error("tsk_table_collection_simplify", ret);
 	
     // update map of remembered_genomes_, which are now the first n entries in the node table
 	for (tsk_id_t i = 0; i < (tsk_id_t)remembered_genomes_.size(); i++)
@@ -4742,23 +4743,20 @@ void SLiMSim::CheckCoalescenceAfterSimplification(void)
 		EIDOS_TERMINATION << "ERROR (SLiMSim::CheckCoalescenceAfterSimplification): (internal error) coalescence check called with recording or checking off." << EidosTerminate();
 #endif
 	
-	// Copy the table collection; Jerome says this is unnecessary since table_collection_build_indexes()
+	// Copy the table collection; Jerome says this is unnecessary since tsk_table_collection_build_index()
 	// does not modify the core information in the table collection, but just adds some separate indices.
 	// However, we also need to add a population table, so really it is best to make a copy I think.
 	tsk_table_collection_t tables_copy;
 	int ret;
 	
-	ret = tsk_table_collection_init(&tables_copy, 0);
-	if (ret < 0) handle_error("tsk_table_collection_init", ret);
-	
-	ret = table_collection_copy(&tables_, &tables_copy);
-	if (ret < 0) handle_error("table_collection_copy", ret);
+	ret = tsk_table_collection_copy(&tables_, &tables_copy, 0);
+	if (ret < 0) handle_error("tsk_table_collection_copy", ret);
 	
 	// Our tables copy needs to have a population table now, since this is required to build a tree sequence
 	WritePopulationTable(&tables_copy);
 	
-	ret = table_collection_build_indexes(&tables_copy, 0);
-	if (ret < 0) handle_error("table_collection_build_indexes", ret);
+	ret = tsk_table_collection_build_index(&tables_copy, 0);
+	if (ret < 0) handle_error("tsk_table_collection_build_index", ret);
 	
 	tsk_treeseq_t ts;
 	
@@ -4787,19 +4785,19 @@ void SLiMSim::CheckCoalescenceAfterSimplification(void)
 	// (not coalesced).  Doing this requires a scan through all the roots at each site, which is very slow if we have
 	// indeed coalesced, but if we are far from coalescence we will usually be able to determine that in the scan of the
 	// first tree (because every site will probably be uncoalesced), which seems like the right performance trade-off.
-	sparse_tree_t t;
+	tsk_tree_t t;
 	bool fully_coalesced = true;
 	
-	sparse_tree_alloc(&t, &ts, TSK_SAMPLE_COUNTS);
-	if (ret < 0) handle_error("sparse_tree_alloc", ret);
+	tsk_tree_init(&t, &ts, TSK_SAMPLE_COUNTS);
+	if (ret < 0) handle_error("tsk_tree_init", ret);
 	
-	sparse_tree_set_tracked_samples(&t, extant_node_count, all_extant_nodes.data());
-	if (ret < 0) handle_error("sparse_tree_set_tracked_samples", ret);
+	tsk_tree_set_tracked_samples(&t, extant_node_count, all_extant_nodes.data());
+	if (ret < 0) handle_error("tsk_tree_set_tracked_samples", ret);
 	
-	ret = sparse_tree_first(&t);
-	if (ret < 0) handle_error("sparse_tree_first", ret);
+	ret = tsk_tree_first(&t);
+	if (ret < 0) handle_error("tsk_tree_first", ret);
 	
-	for (; (ret == 1) && fully_coalesced; ret = sparse_tree_next(&t))
+	for (; (ret == 1) && fully_coalesced; ret = tsk_tree_next(&t))
 	{
 #if 0
 		// If we didn't retain FIRST_GEN ancestors, or remember genomes, >1 root would mean not coalesced
@@ -4826,18 +4824,18 @@ void SLiMSim::CheckCoalescenceAfterSimplification(void)
 		}
 #endif
 	}
-	if (ret < 0) handle_error("sparse_tree_next", ret);
+	if (ret < 0) handle_error("tsk_tree_next", ret);
 	
-	ret = sparse_tree_free(&t);
-	if (ret < 0) handle_error("sparse_tree_free", ret);
+	ret = tsk_tree_free(&t);
+	if (ret < 0) handle_error("tsk_tree_free", ret);
 	
-	ret = tree_sequence_free(&ts);
-	if (ret < 0) handle_error("tree_sequence_free", ret);
+	ret = tsk_treeseq_free(&ts);
+	if (ret < 0) handle_error("tsk_treeseq_free", ret);
 	
 	if (&tables_copy != &tables_)
 	{
-		ret = table_collection_free(&tables_copy);
-		if (ret < 0) handle_error("table_collection_free", ret);
+		ret = tsk_table_collection_free(&tables_copy);
+		if (ret < 0) handle_error("tsk_table_collection_free", ret);
 	}
 	
 	//std::cout << generation_ << ": fully_coalesced == " << (fully_coalesced ? "TRUE" : "false") << std::endl;
@@ -4847,7 +4845,7 @@ void SLiMSim::CheckCoalescenceAfterSimplification(void)
 void SLiMSim::RecordTablePosition(void)
 {
 	// keep the current table position for rewinding if a proposed child is rejected
-	table_collection_record_position(&tables_, &table_position_);
+	tsk_table_collection_record_num_rows(&tables_, &table_position_);
 }
 
 void SLiMSim::AllocateTreeSequenceTables(void)
@@ -4900,7 +4898,7 @@ void SLiMSim::RetractNewIndividual()
 	// around the code since it seems to keep coming back...
 	//current_new_individual_ = nullptr;
 	
-    table_collection_reset_position(&tables_, &table_position_);
+    tsk_table_collection_truncate(&tables_, &table_position_);
 }
 
 void SLiMSim::RecordNewGenome(std::vector<slim_position_t> *p_breakpoints, Genome *p_new_genome, 
@@ -5075,17 +5073,17 @@ void SLiMSim::CheckAutoSimplification(void)
 			// We could, in principle, calculate actual memory used based on number of rows * sizeof(column), etc.,
 			// but that seems like overkill; adding together the number of rows in all the tables should be a
 			// reasonable proxy, and this whole thing is just a heuristic that needs to be tailored anyway.
-			uint64_t old_table_size = (uint64_t)tables_.nodes->num_rows;
-            old_table_size += (uint64_t)tables_.edges->num_rows;
-            old_table_size += (uint64_t)tables_.sites->num_rows;
-            old_table_size += (uint64_t)tables_.mutations->num_rows;
+			uint64_t old_table_size = (uint64_t)tables_.nodes.num_rows;
+            old_table_size += (uint64_t)tables_.edges.num_rows;
+            old_table_size += (uint64_t)tables_.sites.num_rows;
+            old_table_size += (uint64_t)tables_.mutations.num_rows;
 			
 			SimplifyTreeSequence();
 			
-			uint64_t new_table_size = (uint64_t)tables_.nodes->num_rows;
-            new_table_size += (uint64_t)tables_.edges->num_rows;
-            new_table_size += (uint64_t)tables_.sites->num_rows;
-            new_table_size += (uint64_t)tables_.mutations->num_rows;
+			uint64_t new_table_size = (uint64_t)tables_.nodes.num_rows;
+            new_table_size += (uint64_t)tables_.edges.num_rows;
+            new_table_size += (uint64_t)tables_.sites.num_rows;
+            new_table_size += (uint64_t)tables_.mutations.num_rows;
 			double ratio = old_table_size / (double)new_table_size;
 			
 			//std::cout << "auto-simplified in generation " << generation_ << "; old size " << old_table_size << ", new size " << new_table_size;
@@ -5139,7 +5137,6 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 	
 	int ret = tsk_table_collection_init(&tables_, 0);
 	if (ret != 0) handle_error("TreeSequenceDataFromAscii()", ret);
-	RecordTablePosition();
 	
 	ret = table_collection_load_text(&tables_,
 									 MspTxtNodeTable,
@@ -5163,11 +5160,8 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 	// done in place, so we make a copy of tables here to act as a source for the process of copying new information
 	// back into tables.
 	tsk_table_collection_t tables_copy;
-	ret = tsk_table_collection_init(&tables_copy, 0);
-	if (ret < 0) handle_error("convert_to_ascii", ret);
-	
-	ret = table_collection_copy(&tables_, &tables_copy);
-	if (ret < 0) handle_error("convert_to_ascii", ret);
+	ret = tsk_table_collection_copy(&tables_, &tables_copy, 0);
+	if (ret < 0) handle_error("read_from_ascii", ret);
 	
 	// de-ASCII-fy the metadata and derived state information; this is the inverse of the work done by TreeSequenceDataToAscii()
 	
@@ -5178,15 +5172,15 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		bool metadata_has_nucleotide = (file_version >= 3);		// at or after "0.3"
 		
 		// Mutation derived state
-		const char *derived_state = tables_.mutations->derived_state;
-		tsk_size_t *derived_state_offset = tables_.mutations->derived_state_offset;
+		const char *derived_state = tables_.mutations.derived_state;
+		tsk_size_t *derived_state_offset = tables_.mutations.derived_state_offset;
 		std::vector<slim_mutationid_t> binary_derived_state;
 		std::vector<tsk_size_t> binary_derived_state_offset;
 		size_t derived_state_total_part_count = 0;
 		
 		// Mutation metadata
-		const char *mutation_metadata = tables_.mutations->metadata;
-		tsk_size_t *mutation_metadata_offset = tables_.mutations->metadata_offset;
+		const char *mutation_metadata = tables_.mutations.metadata;
+		tsk_size_t *mutation_metadata_offset = tables_.mutations.metadata_offset;
 		std::vector<MutationMetadataRec> binary_mutation_metadata;
 		std::vector<tsk_size_t> binary_mutation_metadata_offset;
 		size_t mutation_metadata_total_part_count = 0;
@@ -5194,7 +5188,7 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		binary_derived_state_offset.push_back(0);
 		binary_mutation_metadata_offset.push_back(0);
 		
-		for (size_t j = 0; j < tables_.mutations->num_rows; j++)
+		for (size_t j = 0; j < tables_.mutations.num_rows; j++)
 		{
 			// Mutation derived state
 			std::string string_derived_state(derived_state + derived_state_offset[j], derived_state_offset[j+1] - derived_state_offset[j]);
@@ -5242,10 +5236,10 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 			binary_mutation_metadata.resize(1);
 		
 		ret = tsk_mutation_table_set_columns(&tables_.mutations,
-										 tables_copy.mutations->num_rows,
-										 tables_copy.mutations->site,
-										 tables_copy.mutations->node,
-										 tables_copy.mutations->parent,
+										 tables_copy.mutations.num_rows,
+										 tables_copy.mutations.site,
+										 tables_copy.mutations.node,
+										 tables_copy.mutations.parent,
 										 (char *)binary_derived_state.data(),
 										 binary_derived_state_offset.data(),
 										 (char *)binary_mutation_metadata.data(),
@@ -5257,15 +5251,15 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 	{
 		static_assert(sizeof(GenomeMetadataRec) == 10, "GenomeMetadataRec has changed size; this code probably needs to be updated");
 		
-		const char *metadata = tables_.nodes->metadata;
-		tsk_size_t *metadata_offset = tables_.nodes->metadata_offset;
+		const char *metadata = tables_.nodes.metadata;
+		tsk_size_t *metadata_offset = tables_.nodes.metadata_offset;
 		std::vector<GenomeMetadataRec> binary_metadata;
 		std::vector<tsk_size_t> binary_metadata_offset;
 		size_t metadata_total_part_count = 0;
 		
 		binary_metadata_offset.push_back(0);
 		
-		for (size_t j = 0; j < tables_.nodes->num_rows; j++)
+		for (size_t j = 0; j < tables_.nodes.num_rows; j++)
 		{
 			std::string string_metadata(metadata + metadata_offset[j], metadata_offset[j+1] - metadata_offset[j]);
 			std::vector<std::string> metadata_parts = Eidos_string_split(string_metadata, ",");
@@ -5294,11 +5288,11 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		}
 		
 		ret = tsk_node_table_set_columns(&tables_.nodes,
-									 tables_copy.nodes->num_rows,
-									 tables_copy.nodes->flags,
-									 tables_copy.nodes->time,
-									 tables_copy.nodes->population,
-									 tables_copy.nodes->individual,
+									 tables_copy.nodes.num_rows,
+									 tables_copy.nodes.flags,
+									 tables_copy.nodes.time,
+									 tables_copy.nodes.population,
+									 tables_copy.nodes.individual,
 									 (char *)binary_metadata.data(),
 									 binary_metadata_offset.data());
 		if (ret < 0) handle_error("convert_from_ascii", ret);
@@ -5308,15 +5302,15 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 	{
 		static_assert(sizeof(IndividualMetadataRec) == 24, "IndividualMetadataRec has changed size; this code probably needs to be updated");
 		
-		const char *metadata = tables_.individuals->metadata;
-		tsk_size_t *metadata_offset = tables_.individuals->metadata_offset;
+		const char *metadata = tables_.individuals.metadata;
+		tsk_size_t *metadata_offset = tables_.individuals.metadata_offset;
 		std::vector<IndividualMetadataRec> binary_metadata;
 		std::vector<tsk_size_t> binary_metadata_offset;
 		size_t metadata_total_part_count = 0;
 		
 		binary_metadata_offset.push_back(0);
 		
-		for (size_t j = 0; j < tables_.individuals->num_rows; j++)
+		for (size_t j = 0; j < tables_.individuals.num_rows; j++)
 		{
 			std::string string_metadata(metadata + metadata_offset[j], metadata_offset[j+1] - metadata_offset[j]);
 			std::vector<std::string> metadata_parts = Eidos_string_split(string_metadata, ",");
@@ -5338,10 +5332,10 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		}
 		
 		ret = tsk_individual_table_set_columns(&tables_.individuals,
-										   tables_copy.individuals->num_rows,
-										   tables_copy.individuals->flags,
-										   tables_copy.individuals->location,
-										   tables_copy.individuals->location_offset,
+										   tables_copy.individuals.num_rows,
+										   tables_copy.individuals.flags,
+										   tables_copy.individuals.location,
+										   tables_copy.individuals.location_offset,
 										   (char *)binary_metadata.data(),
 										   binary_metadata_offset.data());
 		if (ret < 0) handle_error("convert_from_ascii", ret);
@@ -5352,14 +5346,14 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		static_assert(sizeof(SubpopulationMetadataRec) == 88, "SubpopulationMetadataRec has changed size; this code probably needs to be updated");
 		static_assert(sizeof(SubpopulationMigrationMetadataRec) == 12, "SubpopulationMigrationMetadataRec has changed size; this code probably needs to be updated");
 		
-		const char *metadata = tables_.populations->metadata;
-		tsk_size_t *metadata_offset = tables_.populations->metadata_offset;
+		const char *metadata = tables_.populations.metadata;
+		tsk_size_t *metadata_offset = tables_.populations.metadata_offset;
 		char *binary_metadata = NULL;
 		std::vector<tsk_size_t> binary_metadata_offset;
 		
 		binary_metadata_offset.push_back(0);
 		
-		for (size_t j = 0; j < tables_.populations->num_rows; j++)
+		for (size_t j = 0; j < tables_.populations.num_rows; j++)
 		{
 			tsk_size_t metadata_string_length = metadata_offset[j+1] - metadata_offset[j];
 			
@@ -5412,14 +5406,17 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 		}
 		
 		ret = tsk_population_table_set_columns(&tables_.populations,
-										   tables_copy.populations->num_rows,
+										   tables_copy.populations.num_rows,
 										   binary_metadata,
 										   binary_metadata_offset.data());
 		if (ret < 0) handle_error("convert_from_ascii", ret);
 	}
+
+    // not sure if we need to do this here, but it doesn't hurt
+	RecordTablePosition();
 	
 	// We are done with our private copy of the table collection
-	table_collection_free(&tables_copy);
+	tsk_table_collection_free(&tables_copy);
 }
 
 void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
@@ -5429,10 +5426,7 @@ void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
 	// columns in to tsk_mutation_table_set_columns() and tsk_node_table_set_columns(); there is no way to just patch up the
 	// columns in p_tables, we have to copy a new set of information into p_tables wholesale.
 	tsk_table_collection_t tables_copy;
-	int ret = tsk_table_collection_init(&tables_copy, 0);
-	if (ret < 0) handle_error("convert_to_ascii", ret);
-	
-	ret = table_collection_copy(p_tables, &tables_copy);
+	int ret = tsk_table_collection_copy(p_tables, &tables_copy, 0);
 	if (ret < 0) handle_error("convert_to_ascii", ret);
 	
     /********************************************************
@@ -5507,10 +5501,10 @@ void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
 		}
 		
 		ret = tsk_mutation_table_set_columns(&p_tables->mutations,
-										tables_copy.mutations->num_rows,
-										tables_copy.mutations->site,
-										tables_copy.mutations->node,
-										tables_copy.mutations->parent,
+										tables_copy.mutations.num_rows,
+										tables_copy.mutations.site,
+										tables_copy.mutations.node,
+										tables_copy.mutations.parent,
 										text_derived_state.c_str(),
 										text_derived_state_offset.data(),
 										text_mutation_metadata.c_str(),
@@ -5542,11 +5536,11 @@ void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
 		}
 		
 		ret = tsk_node_table_set_columns(&p_tables->nodes,
-									 tables_copy.nodes->num_rows,
-									 tables_copy.nodes->flags,
-									 tables_copy.nodes->time,
-									 tables_copy.nodes->population,
-									 tables_copy.nodes->individual,
+									 tables_copy.nodes.num_rows,
+									 tables_copy.nodes.flags,
+									 tables_copy.nodes.time,
+									 tables_copy.nodes.population,
+									 tables_copy.nodes.individual,
 									 text_metadata.c_str(),
 									 text_metadata_offset.data());
 		if (ret < 0) handle_error("convert_to_ascii", ret);
@@ -5580,10 +5574,10 @@ void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
 		}
 		
 		ret = tsk_individual_table_set_columns(&p_tables->individuals,
-										   tables_copy.individuals->num_rows,
-										   tables_copy.individuals->flags,
-										   tables_copy.individuals->location,
-										   tables_copy.individuals->location_offset,
+										   tables_copy.individuals.num_rows,
+										   tables_copy.individuals.flags,
+										   tables_copy.individuals.location,
+										   tables_copy.individuals.location_offset,
 										   text_metadata.c_str(),
 										   text_metadata_offset.data());
 		if (ret < 0) handle_error("convert_to_ascii", ret);
@@ -5666,14 +5660,14 @@ void SLiMSim::TreeSequenceDataToAscii(tsk_table_collection_t *p_tables)
 		}
 		
 		ret = tsk_population_table_set_columns(&p_tables->populations,
-										   tables_copy.populations->num_rows,
+										   tables_copy.populations.num_rows,
 										   text_metadata.c_str(),
 										   text_metadata_offset.data());
 		if (ret < 0) handle_error("convert_to_ascii", ret);
 	}
 	
 	// We are done with our private copy of the table collection
-	table_collection_free(&tables_copy);
+	tsk_table_collection_free(&tables_copy);
 }
 
 void SLiMSim::DerivedStatesFromAscii(tsk_table_collection_t *p_tables)
@@ -5957,7 +5951,7 @@ void SLiMSim::FixAliveIndividuals(tsk_table_collection_t *p_tables)
 void SLiMSim::WritePopulationTable(tsk_table_collection_t *p_tables)
 {
 	// This overwrites whatever might be previously in the population table
-	population_table_clear(p_tables->populations);
+	tsk_population_table_clear(&p_tables->populations);
 	
 	// we will write out empty entries for all unused slots, up to largest_subpop_id_
 	// this is because tskit doesn't like unused slots; slot indices must correspond to subpop ids
@@ -6359,27 +6353,24 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
 	else
 	{
         // this is done by SimplifyTreeSequence() but we need to do in any case
-		ret = table_collection_sort(&tables_, /* edge_start */ 0, /* flags */ 0);
-        if (ret < 0) handle_error("table_collection_sort", ret);
+		ret = tsk_table_collection_sort(&tables_, /* edge_start */ 0, /* flags */ 0);
+        if (ret < 0) handle_error("tsk_table_collection_sort", ret);
 		
         // Remove redundant sites we added
-        ret = table_collection_deduplicate_sites(&tables_, 0);
-        if (ret < 0) handle_error("deduplicate_sites", ret);
+        ret = tsk_table_collection_deduplicate_sites(&tables_, 0);
+        if (ret < 0) handle_error("tsk_table_collection_deduplicate_sites", ret);
     }
 	
 	// Copy the table collection so that modifications we do for writing don't affect the original tables
 	tsk_table_collection_t output_tables;
-	ret = tsk_table_collection_init(&output_tables, 0);
-	if (ret < 0) handle_error("tsk_table_collection_init", ret);
-	
-	ret = table_collection_copy(&tables_, &output_tables);
-	if (ret < 0) handle_error("table_collection_copy", ret);
+	ret = tsk_table_collection_copy(&tables_, &output_tables, 0);
+	if (ret < 0) handle_error("tsk_table_collection_copy", ret);
 	
 	// Add in the mutation.parent information; valid tree sequences need parents, but we don't keep them while running
-	ret = table_collection_build_indexes(&output_tables, 0);
-	if (ret < 0) handle_error("table_collection_build_indexes", ret);
-	ret = table_collection_compute_mutation_parents(&output_tables, 0);
-	if (ret < 0) handle_error("compute_mutation_parents", ret);
+	ret = tsk_table_collection_build_index(&output_tables, 0);
+	if (ret < 0) handle_error("tsk_table_collection_build_index", ret);
+	ret = tsk_table_collection_compute_mutation_parents(&output_tables, 0);
+	if (ret < 0) handle_error("tsk_table_collection_compute_mutation_parents", ret);
 	
 	// Add information about the current generation to the individual table; 
 	// this modifies "remembered" individuals, since information comes from the
@@ -6397,7 +6388,7 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
 		for (Individual *individual : subpop->parent_individuals_)
 		{
 			tsk_id_t node_id = individual->genome1_->tsk_node_id_;
-			tsk_id_t ind_id = output_tables.nodes->individual[node_id];
+			tsk_id_t ind_id = output_tables.nodes.individual[node_id];
 			
 			individual_map.push_back(ind_id);
 		}
@@ -6414,8 +6405,8 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
 	// This makes sense; as far as tree-seq recording is concerned, tree_seq_generation_ is the generation counter
 	slim_generation_t time_adjustment = tree_seq_generation_;
 	
-	for (size_t node_index = 0; node_index < output_tables.nodes->num_rows; ++node_index)
-		output_tables.nodes->time[node_index] += time_adjustment;
+	for (size_t node_index = 0; node_index < output_tables.nodes.num_rows; ++node_index)
+		output_tables.nodes.time[node_index] += time_adjustment;
 	
 	// Add a row to the Provenance table to record current state; text format does not allow newlines in the entry,
 	// so we don't prettyprint the JSON when going to text, as a quick fix that avoids quoting the newlines etc.
@@ -6427,7 +6418,7 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
 		// derived state data must be in ASCII (or unicode) on disk, according to tskit policy
 		DerivedStatesToAscii(&output_tables);
 		
-		table_collection_dump(&output_tables, path.c_str(), 0);
+		tsk_table_collection_dump(&output_tables, path.c_str(), 0);
 		
 		// In nucleotide-based models, write out the ancestral sequence, re-opening the kastore to append
 		if (nucleotide_based_)
@@ -6477,13 +6468,13 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
 			FILE *MspTxtPopulationTable = fopen(PopulationFileName.c_str(), "w");
 			FILE *MspTxtProvenanceTable = fopen(ProvenanceFileName.c_str(), "w");
 			
-			node_table_dump_text(output_tables.nodes, MspTxtNodeTable);
-			edge_table_dump_text(output_tables.edges, MspTxtEdgeTable);
-			site_table_dump_text(output_tables.sites, MspTxtSiteTable);
-			mutation_table_dump_text(output_tables.mutations, MspTxtMutationTable);
-			individual_table_dump_text(output_tables.individuals, MspTxtIndividualTable);
-			population_table_dump_text(output_tables.populations, MspTxtPopulationTable);
-			provenance_table_dump_text(output_tables.provenances, MspTxtProvenanceTable);
+			tsk_node_table_dump_text(&output_tables.nodes, MspTxtNodeTable);
+			tsk_edge_table_dump_text(&output_tables.edges, MspTxtEdgeTable);
+			tsk_site_table_dump_text(&output_tables.sites, MspTxtSiteTable);
+			tsk_mutation_table_dump_text(&output_tables.mutations, MspTxtMutationTable);
+			tsk_individual_table_dump_text(&output_tables.individuals, MspTxtIndividualTable);
+			tsk_population_table_dump_text(&output_tables.populations, MspTxtPopulationTable);
+			tsk_provenance_table_dump_text(&output_tables.provenances, MspTxtProvenanceTable);
 			
 			fclose(MspTxtNodeTable);
 			fclose(MspTxtEdgeTable);
@@ -6514,7 +6505,7 @@ void SLiMSim::WriteTreeSequence(std::string &p_recording_tree_path, bool p_binar
     }
 	
 	// Done with our tables copy
-	table_collection_free(&output_tables);
+	tsk_table_collection_free(&output_tables);
 }	
 
 
@@ -6527,7 +6518,7 @@ void SLiMSim::FreeTreeSequence(void)
 	
 	// Free any tree-sequence recording stuff that has been allocated; called when SLiMSim is getting deallocated,
 	// and also when we're wiping the slate clean with something like readFromPopulationFile().
-	table_collection_free(&tables_);
+	tsk_table_collection_free(&tables_);
 	
 	remembered_genomes_.clear();
 }
@@ -6664,7 +6655,7 @@ void SLiMSim::DumpMutationTable(void)
 		}
 		// */
 		
-		std::cout << "Mutation index " << mutindex << " has node_id " << node_id << ", site_id " << site_id << ", position " << tables_.sites->position[site_id] << ", parent id " << parent_id << ", derived state length " << derived_state_length << ", metadata length " << metadata_length << std::endl;
+		std::cout << "Mutation index " << mutindex << " has node_id " << node_id << ", site_id " << site_id << ", position " << tables_.sites.position[site_id] << ", parent id " << parent_id << ", derived state length " << derived_state_length << ", metadata length " << metadata_length << std::endl;
 		
 		std::cout << "   derived state: ";
 		for (size_t mutid_index = 0; mutid_index < derived_state_length / sizeof(slim_mutationid_t); ++mutid_index)
@@ -6732,17 +6723,14 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 		tsk_table_collection_t *tables_copy;
 		
 		tables_copy = (tsk_table_collection_t *)malloc(sizeof(tsk_table_collection_t));
-		ret = tsk_table_collection_init(tables_copy, 0);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_table_collection_init()", ret);
-		
-		ret = table_collection_copy(&tables_, tables_copy);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity table_collection_copy()", ret);
+		ret = tsk_table_collection_copy(&tables_, tables_copy, 0);
+		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_table_collection_copy()", ret);
 		
 		// our tables copy needs to have a population table now, since this is required to build a tree sequence
 		WritePopulationTable(tables_copy);
 		
 		// simplify before making our tree_sequence object; the sort and deduplicate and compute parents are required for the crosscheck, whereas the simplify
-		// could perhaps be removed, which would cause the vargen_t to visit a bunch of stuff unrelated to the current individuals.
+		// could perhaps be removed, which would cause the tsk_vargen_t to visit a bunch of stuff unrelated to the current individuals.
 		// this code is adapted from SLiMSim::SimplifyTreeSequence(), but we don't need to update the TSK map table or the table position,
 		// and we simplify down to just the extant individuals since we can't cross-check older individuals anyway...
 		if (tables_copy->nodes.num_rows != 0)
@@ -6753,21 +6741,21 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 				for (Genome *genome : iter->second->parent_genomes_)
 					samples.push_back(genome->tsk_node_id_);
 			
-			ret = table_collection_sort(tables_copy, /* edge_start */ 0, /* flags */ 0);
-			if (ret < 0) handle_error("table_collection_sort", ret);
+			ret = tsk_table_collection_sort(tables_copy, /* edge_start */ 0, /* flags */ 0);
+			if (ret < 0) handle_error("tsk_table_collection_sort", ret);
 			
-			ret = table_collection_deduplicate_sites(tables_copy, 0);
-			if (ret < 0) handle_error("deduplicate_sites", ret);
+			ret = tsk_table_collection_deduplicate_sites(tables_copy, 0);
+			if (ret < 0) handle_error("tsk_table_collection_deduplicate_sites", ret);
 			
-			ret = table_collection_simplify(tables_copy, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
-			if (ret != 0) handle_error("simplifier_run", ret);
+			ret = tsk_table_collection_simplify(tables_copy, samples.data(), samples.size(), TSK_FILTER_SITES | TSK_FILTER_INDIVIDUALS, NULL);
+			if (ret != 0) handle_error("tsk_table_collection_simplify", ret);
             
 		// must build indexes before compute mutation parents
-		ret = table_collection_build_indexes(tables_copy, 0);
-		if (ret < 0) handle_error("table_collection_build_indexes", ret);
+		ret = tsk_table_collection_build_index(tables_copy, 0);
+		if (ret < 0) handle_error("tsk_table_collection_build_index", ret);
 
-		ret = table_collection_compute_mutation_parents(tables_copy, 0);
-		if (ret < 0) handle_error("table_collection_compute_mutation_parents", ret);
+		ret = tsk_table_collection_compute_mutation_parents(tables_copy, 0);
+		if (ret < 0) handle_error("tsk_table_collection_compute_mutation_parents", ret);
 			
 		}
 		
@@ -6779,24 +6767,24 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_treeseq_init()", ret);
 		
 		// allocate and set up the vargen object we'll use to walk through variants
-		vargen_t *vg;
+		tsk_vargen_t *vg;
 		
-		vg = (vargen_t *)malloc(sizeof(vargen_t));
-		ret = vargen_alloc(vg, ts, ts->samples, ts->num_samples, TSK_16_BIT_GENOTYPES);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity vargen_alloc()", ret);
+		vg = (tsk_vargen_t *)malloc(sizeof(tsk_vargen_t));
+		ret = tsk_vargen_init(vg, ts, ts->samples, ts->num_samples, TSK_16_BIT_GENOTYPES);
+		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_vargen_alloc()", ret);
 		
 		// crosscheck by looping through variants
 		do
 		{
-			variant_t *variant;
+			tsk_variant_t *variant;
 			
-			ret = vargen_next(vg, &variant);
-			if (ret < 0) handle_error("CrosscheckTreeSeqIntegrity vargen_next()", ret);
+			ret = tsk_vargen_next(vg, &variant);
+			if (ret < 0) handle_error("CrosscheckTreeSeqIntegrity tsk_vargen_next()", ret);
 			
 			if (ret == 1)
 			{
 				// We have a new variant; check it against SLiM.  A variant represents a site at which a tracked mutation exists.
-				// The variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
+				// The tsk_variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
 				// in the sample are using them.  We will then check that all the genomes that the variant claims to involve have
 				// the allele the variant attributes to them, and that no genomes contain any alleles at the position that are not
 				// described by the variant.  The variants are returned in sorted order by position, so we can keep pointers into
@@ -6812,7 +6800,7 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 				for (auto substitution_iter = substitution_range_iter.first; substitution_iter != substitution_range_iter.second; ++substitution_iter)
 					fixed_mutids.push_back(substitution_iter->second->mutation_id_);
 				
-				// Check all the genomes against the vargen_t's belief about this site
+				// Check all the genomes against the tsk_vargen_t's belief about this site
 				for (size_t genome_index = 0; genome_index < genome_count; genome_index++)
 				{
 					GenomeWalker &genome_walker = genome_walkers[genome_index];
@@ -6955,16 +6943,16 @@ void SLiMSim::CrosscheckTreeSeqIntegrity(void)
 				EIDOS_TERMINATION << "ERROR (SLiMSim::CrosscheckTreeSeqIntegrity): (internal error) mutations left in genome beyond those in tree." << EidosTerminate();
 		
 		// free
-		ret = vargen_free(vg);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity vargen_free()", ret);
+		ret = tsk_vargen_free(vg);
+		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_vargen_free()", ret);
 		free(vg);
 		
-		ret = tree_sequence_free(ts);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tree_sequence_free()", ret);
+		ret = tsk_treeseq_free(ts);
+		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_treeseq_free()", ret);
 		free(ts);
 		
-		ret = table_collection_free(tables_copy);
-		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity table_collection_free()", ret);
+		ret = tsk_table_collection_free(tables_copy);
+		if (ret != 0) handle_error("CrosscheckTreeSeqIntegrity tsk_table_collection_free()", ret);
 		free(tables_copy);
 	}
 }
@@ -7003,18 +6991,18 @@ typedef struct ts_subpop_info {
 
 void SLiMSim::__TabulateSubpopulationsFromTreeSequence(std::unordered_map<slim_objectid_t, ts_subpop_info> &p_subpopInfoMap, tsk_treeseq_t *p_ts, SLiMModelType p_file_model_type)
 {
-	size_t individual_count = p_ts->tables->individuals->num_rows;
+	size_t individual_count = p_ts->tables->individuals.num_rows;
 	
 	if (individual_count == 0)
 		EIDOS_TERMINATION << "ERROR (SLiMSim::__TabulateSubpopulationsFromTreeSequence): loaded tree sequence files must contain a non-empty individuals table." << EidosTerminate();
 	
-	individual_t individual;
+	tsk_individual_t individual;
 	int ret = 0;
 	
 	for (size_t individual_index = 0; individual_index < individual_count; individual_index++)
 	{
-		ret = tree_sequence_get_individual(p_ts, individual_index, &individual);
-		if (ret != 0) handle_error("__TabulateSubpopulationsFromTreeSequence tree_sequence_get_individual", ret);
+		ret = tsk_treeseq_get_individual(p_ts, individual_index, &individual);
+		if (ret != 0) handle_error("__TabulateSubpopulationsFromTreeSequence tsk_treeseq_get_individual", ret);
 		
 		// tabulate only individuals marked as being alive; everybody else in the table is irrelevant to us during load
 		if (!(individual.flags & SLIM_TSK_INDIVIDUAL_ALIVE))
@@ -7407,7 +7395,7 @@ void SLiMSim::__TabulateMutationsFromTables(std::unordered_map<slim_mutationid_t
 		slim_mutationid_t *derived_state_vec = (slim_mutationid_t *)derived_state_bytes;
 		const void *metadata_vec = metadata_bytes;	// either const MutationMetadataRec* or const MutationMetadataRec_PRENUC*
 		tsk_id_t site_id = mut_table.site[mut_index];
-		double position_double = tables_.sites->position[site_id];
+		double position_double = tables_.sites.position[site_id];
 		double position_double_round = round(position_double);
 		
 		if (position_double_round != position_double)
@@ -7448,11 +7436,11 @@ void SLiMSim::__TabulateMutationsFromTables(std::unordered_map<slim_mutationid_t
 void SLiMSim::__TallyMutationReferencesWithTreeSequence(std::unordered_map<slim_mutationid_t, ts_mut_info> &p_mutMap, std::unordered_map<tsk_id_t, Genome *> p_nodeToGenomeMap, tsk_treeseq_t *p_ts)
 {
 	// allocate and set up the vargen object we'll use to walk through variants
-	vargen_t *vg;
+	tsk_vargen_t *vg;
 	
-	vg = (vargen_t *)malloc(sizeof(vargen_t));
-	int ret = vargen_alloc(vg, p_ts, p_ts->samples, p_ts->num_samples, TSK_16_BIT_GENOTYPES);
-	if (ret != 0) handle_error("__TallyMutationReferencesWithTreeSequence vargen_alloc()", ret);
+	vg = (tsk_vargen_t *)malloc(sizeof(tsk_vargen_t));
+	int ret = tsk_vargen_init(vg, p_ts, p_ts->samples, p_ts->num_samples, TSK_16_BIT_GENOTYPES);
+	if (ret != 0) handle_error("__TallyMutationReferencesWithTreeSequence tsk_vargen_init()", ret);
 	
 	// set up a map from sample indices in the vargen to Genome objects; the sample
 	// may contain nodes that are ancestral and need to be excluded
@@ -7473,15 +7461,15 @@ void SLiMSim::__TallyMutationReferencesWithTreeSequence(std::unordered_map<slim_
 	// add mutations to genomes by looping through variants
 	do
 	{
-		variant_t *variant;
+		tsk_variant_t *variant;
 		
-		ret = vargen_next(vg, &variant);
-		if (ret < 0) handle_error("__TallyMutationReferencesWithTreeSequence vargen_next()", ret);
+		ret = tsk_vargen_next(vg, &variant);
+		if (ret < 0) handle_error("__TallyMutationReferencesWithTreeSequence tsk_vargen_next()", ret);
 		
 		if (ret == 1)
 		{
 			// We have a new variant; set it into SLiM.  A variant represents a site at which a tracked mutation exists.
-			// The variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
+			// The tsk_variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
 			// in the sample are using them.  We want to find any mutations that are shared across all non-null genomes.
 			for (tsk_size_t allele_index = 0; allele_index < variant->num_alleles; ++allele_index)
 			{
@@ -7526,8 +7514,8 @@ void SLiMSim::__TallyMutationReferencesWithTreeSequence(std::unordered_map<slim_
 	while (ret != 0);
 	
 	// free
-	ret = vargen_free(vg);
-	if (ret != 0) handle_error("__TallyMutationReferencesWithTreeSequence vargen_free()", ret);
+	ret = tsk_vargen_free(vg);
+	if (ret != 0) handle_error("__TallyMutationReferencesWithTreeSequence tsk_vargen_free()", ret);
 	free(vg);
 }
 
@@ -7614,11 +7602,11 @@ void SLiMSim::__AddMutationsFromTreeSequenceToGenomes(std::unordered_map<slim_mu
 		return;
 	
 	// allocate and set up the vargen object we'll use to walk through variants
-	vargen_t *vg;
+	tsk_vargen_t *vg;
 	
-	vg = (vargen_t *)malloc(sizeof(vargen_t));
-	int ret = vargen_alloc(vg, p_ts, p_ts->samples, p_ts->num_samples, TSK_16_BIT_GENOTYPES);
-	if (ret != 0) handle_error("__AddMutationsFromTreeSequenceToGenomes vargen_alloc()", ret);
+	vg = (tsk_vargen_t *)malloc(sizeof(tsk_vargen_t));
+	int ret = tsk_vargen_init(vg, p_ts, p_ts->samples, p_ts->num_samples, TSK_16_BIT_GENOTYPES);
+	if (ret != 0) handle_error("__AddMutationsFromTreeSequenceToGenomes tsk_vargen_init()", ret);
 	
 	// set up a map from sample indices in the vargen to Genome objects; the sample
 	// may contain nodes that are ancestral and need to be excluded
@@ -7645,15 +7633,15 @@ void SLiMSim::__AddMutationsFromTreeSequenceToGenomes(std::unordered_map<slim_mu
 	// add mutations to genomes by looping through variants
 	do
 	{
-		variant_t *variant;
+		tsk_variant_t *variant;
 		
-		ret = vargen_next(vg, &variant);
-		if (ret < 0) handle_error("__AddMutationsFromTreeSequenceToGenomes vargen_next()", ret);
+		ret = tsk_vargen_next(vg, &variant);
+		if (ret < 0) handle_error("__AddMutationsFromTreeSequenceToGenomes tsk_vargen_next()", ret);
 		
 		if (ret == 1)
 		{
 			// We have a new variant; set it into SLiM.  A variant represents a site at which a tracked mutation exists.
-			// The variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
+			// The tsk_variant_t will tell us all the allelic states involved at that site, what the alleles are, and which genomes
 			// in the sample are using them.  We will then set all the genomes that the variant claims to involve to have
 			// the allele the variant attributes to them.  The variants are returned in sorted order by position, so we can
 			// always add new mutations to the ends of genomes.
@@ -7706,8 +7694,8 @@ void SLiMSim::__AddMutationsFromTreeSequenceToGenomes(std::unordered_map<slim_mu
 	while (ret != 0);
 	
 	// free
-	ret = vargen_free(vg);
-	if (ret != 0) handle_error("__AddMutationsFromTreeSequenceToGenomes vargen_free()", ret);
+	ret = tsk_vargen_free(vg);
+	if (ret != 0) handle_error("__AddMutationsFromTreeSequenceToGenomes tsk_vargen_free()", ret);
 	free(vg);
 }
 
@@ -7732,8 +7720,8 @@ slim_generation_t SLiMSim::_InstantiateSLiMObjectsFromTables(EidosInterpreter *p
 	// This makes sense; as far as tree-seq recording is concerned, tree_seq_generation_ is the generation counter
 	slim_generation_t time_adjustment = tree_seq_generation_;
 	
-	for (size_t node_index = 0; node_index < tables_.nodes->num_rows; ++node_index)
-		tables_.nodes->time[node_index] -= time_adjustment;
+	for (size_t node_index = 0; node_index < tables_.nodes.num_rows; ++node_index)
+		tables_.nodes.time[node_index] -= time_adjustment;
 	
 	// allocate and set up the tree_sequence object that contains all the tree sequences
 	// note that this tree sequence is based upon whatever sample the file was saved with, and may contain in-sample individuals
@@ -7767,17 +7755,17 @@ slim_generation_t SLiMSim::_InstantiateSLiMObjectsFromTables(EidosInterpreter *p
 	
 	__AddMutationsFromTreeSequenceToGenomes(mutIndexMap, nodeToGenomeMap, ts);
 	
-	ret = tree_sequence_free(ts);
-	if (ret != 0) handle_error("_InstantiateSLiMObjectsFromTables tree_sequence_free()", ret);
+	ret = tsk_treeseq_free(ts);
+	if (ret != 0) handle_error("_InstantiateSLiMObjectsFromTables tsk_treeseq_free()", ret);
 	free(ts);
 	
 	// Figure out how many remembered genomes we have; each remembered individual has two remembered genomes
 	// First-generation individuals are also "remembered" in the present design, and so must be included
 	size_t remembered_genome_count = 0;
 	
-	for (tsk_id_t j = 0; (size_t) j < tables_.individuals->num_rows; j++)
+	for (tsk_id_t j = 0; (size_t) j < tables_.individuals.num_rows; j++)
 	{
-		uint32_t flags = tables_.individuals->flags[j];
+		uint32_t flags = tables_.individuals.flags[j];
 		if (flags & (SLIM_TSK_INDIVIDUAL_REMEMBERED | SLIM_TSK_INDIVIDUAL_FIRST_GEN))
 			remembered_genome_count += 2;
 	}
@@ -7795,18 +7783,18 @@ slim_generation_t SLiMSim::_InstantiateSLiMObjectsFromTables(EidosInterpreter *p
 	// ...but we should check that they are all in the individuals table, and either Remembered or FirstGen...
 	for (size_t i = 0; i < remembered_genome_count; ++i)
 	{
-		assert((tsk_size_t)i < tables_.nodes->num_rows);
-		tsk_id_t ind = tables_.nodes->individual[i];
-		assert((ind >= 0) && ((tsk_size_t)ind < tables_.individuals->num_rows));
-		uint32_t ind_flags = tables_.individuals->flags[ind];
+		assert((tsk_size_t)i < tables_.nodes.num_rows);
+		tsk_id_t ind = tables_.nodes.individual[i];
+		assert((ind >= 0) && ((tsk_size_t)ind < tables_.individuals.num_rows));
+		tsk_flags_t ind_flags = tables_.individuals.flags[ind];
 		assert((ind_flags & SLIM_TSK_INDIVIDUAL_REMEMBERED) || (ind_flags & SLIM_TSK_INDIVIDUAL_FIRST_GEN));
 	}
 	
 	// ... and then we should sort them to match the order of the individual table, so that they satisfy
 	// the invariants asserted in SLiMSim::AddIndividualsToTable(); see the comments there
 	std::sort(remembered_genomes_.begin(), remembered_genomes_.end(), [this](tsk_id_t l, tsk_id_t r) {
-		tsk_id_t l_ind = tables_.nodes->individual[l];
-		tsk_id_t r_ind = tables_.nodes->individual[r];
+		tsk_id_t l_ind = tables_.nodes.individual[l];
+		tsk_id_t r_ind = tables_.nodes.individual[r];
 		if (l_ind != r_ind)
 			return l_ind < r_ind;
 		return l < r;
@@ -7820,9 +7808,9 @@ slim_generation_t SLiMSim::_InstantiateSLiMObjectsFromTables(EidosInterpreter *p
 	
 	// Remove individuals that are !(rememebered | first_gen)
     std::vector<tsk_id_t> individual_map;
-    for (tsk_id_t j = 0; (size_t) j < tables_.individuals->num_rows; j++)
+    for (tsk_id_t j = 0; (size_t) j < tables_.individuals.num_rows; j++)
     {
-        uint32_t flags = tables_.individuals->flags[j];
+        uint32_t flags = tables_.individuals.flags[j];
         if ((flags & SLIM_TSK_INDIVIDUAL_REMEMBERED) || (flags & SLIM_TSK_INDIVIDUAL_FIRST_GEN))
             individual_map.push_back(j);
     }
@@ -7894,38 +7882,29 @@ slim_generation_t SLiMSim::_InitializePopulationFromTskitBinaryFile(const char *
 	
 #if 0
 	// CRASHES: the loaded table collection is immutable (non-malloc'd columns)
-	// Jerome says this is a bug, and that he will add a flag for table_collection_load() to make it copy the blocks
+	// Jerome says this is a bug, and that he will add a flag for tsk_table_collection_load() to make it copy the blocks
 	// read the file from disk
-	int ret = tsk_table_collection_init(&tables, TSK_NO_INIT_TABLES);
-	if (ret != 0) handle_error("tsk_table_collection_init", ret);
-	RecordTablePosition();
-	
-	ret = table_collection_load(&tables, p_file, 0);
-	if (ret != 0) handle_error("table_collection_load", ret);
+	ret = tsk_table_collection_load(&tables, p_file, 0);
+	if (ret != 0) handle_error("tsk_table_collection_load", ret);
 #else
 	// WORKAROUND
 	// read the file from disk into a private table collection that is immutable
 	tsk_table_collection_t immutable_tables;
 	
-	int ret = tsk_table_collection_init(&immutable_tables, TSK_NO_INIT_TABLES);
-	if (ret != 0) handle_error("tsk_table_collection_init", ret);
-	
-	ret = table_collection_load(&immutable_tables, p_file, 0);
-	if (ret != 0) handle_error("table_collection_load", ret);
+	int ret = tsk_table_collection_load(&immutable_tables, p_file, 0);
+	if (ret != 0) handle_error("tsk_table_collection_load", ret);
 	
 	// BCH 4/25/2019: if indexes are present on immutable_tables we want to drop them; they are synced up
 	// with the edge table, but we plan to modify the edge table so they will become invalid anyway, and
 	// then they can cause a crash because of their unsynced-ness; see tskit issue #179
-	ret = table_collection_drop_indexes(&immutable_tables);
-	if (ret != 0) handle_error("table_collection_drop_indexes", ret);
+	ret = tsk_table_collection_drop_index(&immutable_tables, 0);
+	if (ret != 0) handle_error("tsk_table_collection_drop_index", ret);
 	
 	// copy the immutable table collection to make a mutable collection
-	ret = tsk_table_collection_init(&tables_, 0);
-	if (ret != 0) handle_error("tsk_table_collection_init", ret);
+	ret = tsk_table_collection_copy(&immutable_tables, &tables_, 0);
+	if (ret < 0) handle_error("tsk_table_collection_copy", ret);
+
 	RecordTablePosition();
-	
-	ret = table_collection_copy(&immutable_tables, &tables_);
-	if (ret < 0) handle_error("table_collection_copy", ret);
 	
 	// convert ASCII derived-state data, which is the required format on disk, back to our in-memory binary format
 	DerivedStatesFromAscii(&tables_);
@@ -7951,7 +7930,7 @@ slim_generation_t SLiMSim::_InitializePopulationFromTskitBinaryFile(const char *
 	}
 	
 	// free our private immutable tables
-	table_collection_free(&immutable_tables);
+	tsk_table_collection_free(&immutable_tables);
 #endif
 	
 	// make the corresponding SLiM objects
@@ -7963,137 +7942,113 @@ size_t SLiMSim::MemoryUsageForTables(tsk_table_collection_t &p_tables)
 	tsk_table_collection_t &t = p_tables;
 	size_t usage = 0;
 	
-	if (t.individuals)
-	{
-		usage += sizeof(tsk_individual_table_t);
-		
-		if (t.individuals.flags)
-			usage += t.individuals.max_rows * sizeof(uint32_t);
-		if (t.individuals.location_offset)
-			usage += t.individuals.max_rows * sizeof(tsk_size_t);
-		if (t.individuals.metadata_offset)
-			usage += t.individuals.max_rows * sizeof(tsk_size_t);
-		
-		if (t.individuals.location)
-			usage += t.individuals.max_location_length * sizeof(double);
-		if (t.individuals.metadata)
-			usage += t.individuals.max_metadata_length * sizeof(char);
-	}
+    usage += sizeof(tsk_individual_table_t);
+    
+    if (t.individuals.flags)
+        usage += t.individuals.max_rows * sizeof(uint32_t);
+    if (t.individuals.location_offset)
+        usage += t.individuals.max_rows * sizeof(tsk_size_t);
+    if (t.individuals.metadata_offset)
+        usage += t.individuals.max_rows * sizeof(tsk_size_t);
+    
+    if (t.individuals.location)
+        usage += t.individuals.max_location_length * sizeof(double);
+    if (t.individuals.metadata)
+        usage += t.individuals.max_metadata_length * sizeof(char);
 	
-	if (t.nodes)
-	{
-		usage += sizeof(tsk_node_table_t);
-		
-		if (t.nodes.flags)
-			usage += t.nodes.max_rows * sizeof(uint32_t);
-		if (t.nodes.time)
-			usage += t.nodes.max_rows * sizeof(double);
-		if (t.nodes.population)
-			usage += t.nodes.max_rows * sizeof(tsk_id_t);
-		if (t.nodes.individual)
-			usage += t.nodes.max_rows * sizeof(tsk_id_t);
-		if (t.nodes.metadata_offset)
-			usage += t.nodes.max_rows * sizeof(tsk_size_t);
-		
-		if (t.nodes.metadata)
-			usage += t.nodes.max_metadata_length * sizeof(char);
-	}
+    usage += sizeof(tsk_node_table_t);
+    
+    if (t.nodes.flags)
+        usage += t.nodes.max_rows * sizeof(uint32_t);
+    if (t.nodes.time)
+        usage += t.nodes.max_rows * sizeof(double);
+    if (t.nodes.population)
+        usage += t.nodes.max_rows * sizeof(tsk_id_t);
+    if (t.nodes.individual)
+        usage += t.nodes.max_rows * sizeof(tsk_id_t);
+    if (t.nodes.metadata_offset)
+        usage += t.nodes.max_rows * sizeof(tsk_size_t);
+    
+    if (t.nodes.metadata)
+        usage += t.nodes.max_metadata_length * sizeof(char);
 	
-	if (t.edges)
-	{
-		usage += sizeof(tsk_edge_table_t);
-		
-		if (t.edges.left)
-			usage += t.edges.max_rows * sizeof(double);
-		if (t.edges.right)
-			usage += t.edges.max_rows * sizeof(double);
-		if (t.edges.parent)
-			usage += t.edges.max_rows * sizeof(tsk_id_t);
-		if (t.edges.child)
-			usage += t.edges.max_rows * sizeof(tsk_id_t);
-	}
+    usage += sizeof(tsk_edge_table_t);
+    
+    if (t.edges.left)
+        usage += t.edges.max_rows * sizeof(double);
+    if (t.edges.right)
+        usage += t.edges.max_rows * sizeof(double);
+    if (t.edges.parent)
+        usage += t.edges.max_rows * sizeof(tsk_id_t);
+    if (t.edges.child)
+        usage += t.edges.max_rows * sizeof(tsk_id_t);
 	
-	if (t.migrations)
-	{
-		usage += sizeof(tsk_migration_table_t);
-		
-		if (t.migrations.source)
-			usage += t.migrations.max_rows * sizeof(tsk_id_t);
-		if (t.migrations.dest)
-			usage += t.migrations.max_rows * sizeof(tsk_id_t);
-		if (t.migrations.node)
-			usage += t.migrations.max_rows * sizeof(tsk_id_t);
-		if (t.migrations.left)
-			usage += t.migrations.max_rows * sizeof(double);
-		if (t.migrations.right)
-			usage += t.migrations.max_rows * sizeof(double);
-		if (t.migrations.time)
-			usage += t.migrations.max_rows * sizeof(double);
-	}
+    usage += sizeof(tsk_migration_table_t);
+    
+    if (t.migrations.source)
+        usage += t.migrations.max_rows * sizeof(tsk_id_t);
+    if (t.migrations.dest)
+        usage += t.migrations.max_rows * sizeof(tsk_id_t);
+    if (t.migrations.node)
+        usage += t.migrations.max_rows * sizeof(tsk_id_t);
+    if (t.migrations.left)
+        usage += t.migrations.max_rows * sizeof(double);
+    if (t.migrations.right)
+        usage += t.migrations.max_rows * sizeof(double);
+    if (t.migrations.time)
+        usage += t.migrations.max_rows * sizeof(double);
 	
-	if (t.sites)
-	{
-		usage += sizeof(tsk_site_table_t);
-		
-		if (t.sites.position)
-			usage += t.sites.max_rows * sizeof(double);
-		if (t.sites.ancestral_state_offset)
-			usage += t.sites.max_rows * sizeof(tsk_size_t);
-		if (t.sites.metadata_offset)
-			usage += t.sites.max_rows * sizeof(tsk_size_t);
-		
-		if (t.sites.ancestral_state)
-			usage += t.sites.max_ancestral_state_length * sizeof(char);
-		if (t.sites.metadata)
-			usage += t.sites.max_metadata_length * sizeof(char);
-	}
+    usage += sizeof(tsk_site_table_t);
+    
+    if (t.sites.position)
+        usage += t.sites.max_rows * sizeof(double);
+    if (t.sites.ancestral_state_offset)
+        usage += t.sites.max_rows * sizeof(tsk_size_t);
+    if (t.sites.metadata_offset)
+        usage += t.sites.max_rows * sizeof(tsk_size_t);
+    
+    if (t.sites.ancestral_state)
+        usage += t.sites.max_ancestral_state_length * sizeof(char);
+    if (t.sites.metadata)
+        usage += t.sites.max_metadata_length * sizeof(char);
 	
-	if (t.mutations)
-	{
-		usage += sizeof(tsk_mutation_table_t);
-		
-		if (t.mutations.node)
-			usage += t.mutations.max_rows * sizeof(tsk_id_t);
-		if (t.mutations.site)
-			usage += t.mutations.max_rows * sizeof(tsk_id_t);
-		if (t.mutations.parent)
-			usage += t.mutations.max_rows * sizeof(tsk_id_t);
-		if (t.mutations.derived_state_offset)
-			usage += t.mutations.max_rows * sizeof(tsk_size_t);
-		if (t.mutations.metadata_offset)
-			usage += t.mutations.max_rows * sizeof(tsk_size_t);
-		
-		if (t.mutations.derived_state)
-			usage += t.mutations.max_derived_state_length * sizeof(char);
-		if (t.mutations.metadata)
-			usage += t.mutations.max_metadata_length * sizeof(char);
-	}
+    usage += sizeof(tsk_mutation_table_t);
+    
+    if (t.mutations.node)
+        usage += t.mutations.max_rows * sizeof(tsk_id_t);
+    if (t.mutations.site)
+        usage += t.mutations.max_rows * sizeof(tsk_id_t);
+    if (t.mutations.parent)
+        usage += t.mutations.max_rows * sizeof(tsk_id_t);
+    if (t.mutations.derived_state_offset)
+        usage += t.mutations.max_rows * sizeof(tsk_size_t);
+    if (t.mutations.metadata_offset)
+        usage += t.mutations.max_rows * sizeof(tsk_size_t);
+    
+    if (t.mutations.derived_state)
+        usage += t.mutations.max_derived_state_length * sizeof(char);
+    if (t.mutations.metadata)
+        usage += t.mutations.max_metadata_length * sizeof(char);
 	
-	if (t.populations)
-	{
-		usage += sizeof(tsk_population_table_t);
-		
-		if (t.populations.metadata_offset)
-			usage += t.populations.max_rows * sizeof(tsk_size_t);
-		
-		if (t.populations.metadata)
-			usage += t.populations.max_metadata_length * sizeof(char);
-	}
+    usage += sizeof(tsk_population_table_t);
+    
+    if (t.populations.metadata_offset)
+        usage += t.populations.max_rows * sizeof(tsk_size_t);
+    
+    if (t.populations.metadata)
+        usage += t.populations.max_metadata_length * sizeof(char);
 	
-	if (t.provenances)
-	{
-		usage += sizeof(tsk_provenance_table_t);
-		
-		if (t.provenances.timestamp_offset)
-			usage += t.provenances.max_rows * sizeof(tsk_size_t);
-		if (t.provenances.record_offset)
-			usage += t.provenances.max_rows * sizeof(tsk_size_t);
-		
-		if (t.provenances.timestamp)
-			usage += t.provenances.max_timestamp_length * sizeof(char);
-		if (t.provenances.record)
-			usage += t.provenances.max_record_length * sizeof(char);
-	}
+    usage += sizeof(tsk_provenance_table_t);
+    
+    if (t.provenances.timestamp_offset)
+        usage += t.provenances.max_rows * sizeof(tsk_size_t);
+    if (t.provenances.record_offset)
+        usage += t.provenances.max_rows * sizeof(tsk_size_t);
+    
+    if (t.provenances.timestamp)
+        usage += t.provenances.max_timestamp_length * sizeof(char);
+    if (t.provenances.record)
+        usage += t.provenances.max_record_length * sizeof(char);
 	
 	usage += remembered_genomes_.size() * sizeof(tsk_id_t);
 	
