@@ -5150,7 +5150,7 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 									 MspTxtIndividualTable,
 									 MspTxtPopulationTable,
 									 MspTxtProvenanceTable);
-    if (ret < 0) handle_error("read_from_ascii", ret);
+    if (ret < 0) handle_error("read_from_ascii :: table_collection_load_text", ret);
 	
 	// Parse the provenance info just to find out the file version, which we need for mutation metadata parsing
 	slim_generation_t provenance_gen;
@@ -5164,7 +5164,7 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 	// back into tables.
 	tsk_table_collection_t tables_copy;
 	ret = tsk_table_collection_copy(&tables_, &tables_copy, 0);
-	if (ret < 0) handle_error("read_from_ascii", ret);
+	if (ret < 0) handle_error("read_from_ascii :: tsk_table_collection_copy", ret);
 	
 	// de-ASCII-fy the metadata and derived state information; this is the inverse of the work done by TreeSequenceDataToAscii()
 	

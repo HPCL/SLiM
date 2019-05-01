@@ -176,7 +176,8 @@ edge_table_load_text(tsk_edge_table_t *edge_table, FILE *file)
     char *line = NULL;
     double left, right;
     tsk_id_t parent, child;
-    const char *header = "left\tright\tparent\tchild\n";
+    int id;
+    const char *header = "id\tleft\tright\tparent\tchild\n";
     char *start, *childs;
 
     line = malloc(MAX_LINE);
@@ -204,6 +205,10 @@ edge_table_load_text(tsk_edge_table_t *edge_table, FILE *file)
 
     while ((err = (int) getline(&line, &k, file)) != -1) {
         start = line;
+        err = get_sep_atoi(&start, &id, '\t');
+        if (err <= 0) {
+            goto out;
+        }
         err = get_sep_atof(&start, &left, '\t');
         if (err <= 0) {
             goto out;
