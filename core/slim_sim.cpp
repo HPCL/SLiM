@@ -5413,6 +5413,12 @@ void SLiMSim::TreeSequenceDataFromAscii(std::string NodeFileName,
 										   binary_metadata,
 										   binary_metadata_offset.data());
 		if (ret < 0) handle_error("convert_from_ascii", ret);
+		
+		if (binary_metadata)
+		{
+			free(binary_metadata);
+			binary_metadata = NULL;
+		}
 	}
 
     // not sure if we need to do this here, but it doesn't hurt
