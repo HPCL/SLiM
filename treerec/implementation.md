@@ -15,30 +15,34 @@ internal bookkeeping in SLiM; while msprime uses the SAMPLE flag of nodes.
     before the start of the simulation (i.e., -1 * sim.generation).
 
 2. Individuals who we call RememberIndividuals on are added to the individual table,
-    with the `INDIVIDUAL_REMEMBERED` flag,
-    and their genomes' node IDs are added to `remembered_genomes_`.
+    with the `INDIVIDUAL_REMEMBERED` flag. By default, their genomes' node IDs are
+    also added to `remembered_genomes_`, unless the parameter `is_sample` is `False`. 
 
 3. Simplify, if it occurs, first constructs the list of nodes to maintain as samples
     by starting with `remembered_genomes_`, and then adding the genomes of the current
-    generation.  All individuals in the individual table should be maintained, because
-    they are all pointed to by nodes in this list. It also updates the `msp_node_id_`
+    generation.  Usually, all individuals in the individual table are maintained,
+    because they are all pointed to by nodes in this list. However, individuals who have
+    only been remembered using `is_sample=False` may be lost, if all their
+    corresponding nodes are simplified away. Simplify also updates the `msp_node_id_`
     property of the currently alive SLiM genomes. After simplify, only nodes that are
     in `remembered_genomes_` are marked with `NODE_IS_SAMPLE`.
 
 4. On output, we copy the tables, and with these tables,
     add the current generation to the individual table, 
-    marked with the `INDIVIDUAL_ALIVE` flag,;
+    marked with the `INDIVIDUAL_ALIVE` flag;
     reorder the individual tables so that the the currently alive ones come first,
     and in the order they currently exist in the population;
     simplify;
-    and remove the `NODE_IS_SAMPLE` flag from nodes whose individuals are
-    FIRST_GEN but not REMEMBERED or ALIVE.
+    and remove the `NODE_IS_SAMPLE` flag from nodes whose individuals are FIRST_GEN 
+    but not REMEMBERED or ALIVE (note that nodes from individuals who have been REMEMBERED
+    but not as samples are automatically correct, as they do not have `NODE_IS_SAMPLE` set).
     Also, node times have the current generation added to them, so they are in units
     of number of generations before the end of the simulation.
 
 5. On input from tables, we use the `INDIVIDUAL_ALIVE` flag to decide who is currently alive,
     and use the `INDIVIDUAL_FIRST_GEN` and `INDIVIDUAL_REMEMBERED` flags to
-    decide which genomes to add to `remembered_genomes_`.
+    decide which genomes to add to `remembered_genomes_`. Nodes with an individual marked as
+    `INDIVIDUAL_REMEMBERED` are only added like this if they also have `NODE_IS_SAMPLE` set.
     We also add the `NODE_IS_SAMPLE` flag to nodes whose individuals are FIRST_GEN,
     and remove the individuals that are not FIRST_GEN or REMEMBERED (and therefore
     only ALIVE) from the individual table;
@@ -70,7 +74,7 @@ Internal state:
 - `remembered_genomes_`: the node IDs of genomes whose individuals are FIRST_GEN or REMBEMBERED
 
     * initialized at the start of each new, not-from-anywhere-else subpopulation
-    * added to by RememberIndividuals
+    * added to by `RememberIndividuals(..., is_sample=True)`
     * updated by Simplify
 
 - `msp_node_id_` properties of currently alive SLiM individual `genome1_` and `genome2_`:
@@ -89,7 +93,7 @@ State at output:
 
 - `tables.nodes`:
 
-    * NODE_IS_SAMPLE flag: if they are REMEMBERED and/or ALIVE
+    * NODE_IS_SAMPLE flag: if they are REMEMBERED as samples and/or ALIVE
     * individual column: if they are REMEMBERED and/or ALIVE and/or FIRST_GEN
     * time: (current generation - birth generation)
 
